@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "comment": "Root config for editors only. `npm run typecheck` compiles server/ and admin/ separately, because they target different runtimes (Node vs. browser).",
+  "files": [],
+  "include": []
+}

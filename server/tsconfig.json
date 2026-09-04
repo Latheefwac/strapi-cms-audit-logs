@@ -1,0 +1,15 @@
+{
+  "extends": "@strapi/typescript-utils/tsconfigs/server",
+  "include": ["./src"],
+  "compilerOptions": {
+    "rootDir": "../",
+    "baseUrl": ".",
+    "strict": true,
+    "noUncheckedIndexedAccess": false,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": false,
+    "composite": false,
+    "incremental": false
+  }
+}
