@@ -1,5 +1,5 @@
 {
-  "name": "strapi-plugin-audit-log",
+  "name": "strapi-cms-audit-log",
   "version": "1.1.0",
   "description": "Audit logging for Strapi v5. Content create/update/delete/publish/unpublish with field-level diffs and a per-widget before/after view of dynamic zones, plus logins, failed logins, logouts, denied requests and admin user/role/permission/media changes — all from Strapi Community Edition events. RBAC-protected admin UI, redaction, retention and structured-log forwarding.",
   "keywords": [
