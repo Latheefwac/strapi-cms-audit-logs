@@ -5,9 +5,9 @@ Three steps, none of which touch your content types.
 ## 1. Install
 
 ```bash
-npm install strapi-plugin-audit-log
+npm install strapi-cms-audit-log
 # or
-yarn add strapi-plugin-audit-log
+yarn add strapi-cms-audit-log
 ```
 
 ## 2. Configure

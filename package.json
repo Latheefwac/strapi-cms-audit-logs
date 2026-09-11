@@ -1,5 +1,5 @@
 {
-  "name": "strapi-plugin-audit-log",
+  "name": "strapi-cms-audit-log",
   "version": "1.2.0",
   "description": "Tamper-evident audit logging for Strapi v5. Content create/update/delete/publish/unpublish with field-level diffs and a per-widget before/after view, plus logins, failed logins, logouts, denied requests and admin user/role/permission/media changes — all from Community Edition events. Hash-chained, undeletable, correlation ids on every request, RBAC-protected admin UI, redaction, self-audited retention and structured-log forwarding. Built to pass an OWASP ASVS L2 (V7) review.",
   "keywords": [
@@ -107,10 +107,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Latheefwac/strapi-plugin-audit-log.git"
+    "url": "git+https://github.com/Latheefwac/strapi-cms-audit-logs.git"
   },
   "bugs": {
-    "url": "https://github.com/Latheefwac/strapi-plugin-audit-log/issues"
+    "url": "https://github.com/Latheefwac/strapi-cms-audit-logs/issues"
   },
-  "homepage": "https://github.com/Latheefwac/strapi-plugin-audit-log#readme"
+  "homepage": "https://github.com/Latheefwac/strapi-cms-audit-logs#readme"
 }

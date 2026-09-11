@@ -1,4 +1,4 @@
-# strapi-plugin-audit-log
+# strapi-cms-audit-log
 
 Automatic audit logging for **Strapi v5**, in two halves.
 
@@ -103,11 +103,11 @@ Mapped against the usual checklist:
 ## Installation
 
 ```bash
-npm install strapi-plugin-audit-log
+npm install strapi-cms-audit-log
 ```
 
 ```bash
-yarn add strapi-plugin-audit-log
+yarn add strapi-cms-audit-log
 ```
 
 Then enable it in `config/plugins.ts`:
@@ -503,7 +503,7 @@ Worth alerting on: repeated `login.failed` from one `ipAddress`, any
 Developing the plugin alongside a Strapi app usually means a path dependency:
 
 ```json
-{ "dependencies": { "strapi-plugin-audit-log": "file:../strapi-plugin-audit-log" } }
+{ "dependencies": { "strapi-cms-audit-log": "file:../strapi-cms-audit-log" } }
 ```
 
 That works, with **one thing you must clean up afterwards**.
@@ -511,7 +511,7 @@ That works, with **one thing you must clean up afterwards**.
 Yarn 1's `file:` protocol copies the directory wholesale. It does not honour the
 `files` field and it does not skip `node_modules`, so the plugin's *development*
 dependencies are installed into your app at
-`node_modules/strapi-plugin-audit-log/node_modules/` — `@strapi/strapi`,
+`node_modules/strapi-cms-audit-log/node_modules/` — `@strapi/strapi`,
 `@strapi/admin`, `react`, `react-dom`, `react-router-dom`, `react-intl` and
 `styled-components` among them.
 
@@ -539,13 +539,13 @@ nothing wrong to find in any of them.
 npm would have given you anyway:
 
 ```bash
-rm -rf node_modules/strapi-plugin-audit-log/node_modules
+rm -rf node_modules/strapi-cms-audit-log/node_modules
 ```
 
 Make it survive the next install with a `postinstall` script:
 
 ```json
-{ "scripts": { "postinstall": "rm -rf node_modules/strapi-plugin-audit-log/node_modules" } }
+{ "scripts": { "postinstall": "rm -rf node_modules/strapi-cms-audit-log/node_modules" } }
 ```
 
 Then clear Vite's dependency cache (`rm -rf node_modules/.strapi/vite`), restart
@@ -555,7 +555,7 @@ Two more things about a path install, unrelated to the above:
 
 - Yarn **copies** rather than links, so changes to the plugin need
   `npm run build` in the plugin followed by re-copying `dist/` into
-  `node_modules/strapi-plugin-audit-log/dist`. A bare `yarn install` will not
+  `node_modules/strapi-cms-audit-log/dist`. A bare `yarn install` will not
   refresh it — the resolution is unchanged, so yarn skips the copy.
 - Strapi loads plugins at boot, so a restart is always required.
 
@@ -748,7 +748,7 @@ trusting a spoofable header.
 ### Why admin and server types are separate
 
 The canonical types live in `server/src/types` and are re-exported from
-`strapi-plugin-audit-log/strapi-server`. The admin panel keeps its own copies of
+`strapi-cms-audit-log/strapi-server`. The admin panel keeps its own copies of
 the few shared unions in `admin/src/types.ts`.
 
 That is a build constraint, not an oversight. `@strapi/sdk-plugin` compiles the
@@ -941,7 +941,7 @@ import type {
   AuditUserConfig,
   AuditWriteMode,
   ContentTypeSelector,
-} from 'strapi-plugin-audit-log/strapi-server';
+} from 'strapi-cms-audit-log/strapi-server';
 ```
 
 `PLUGIN_ID`, `AUDIT_LOG_UID`, `PERMISSIONS` and `DEFAULT_IGNORED_FIELDS` are
@@ -979,7 +979,7 @@ two-field edit on a 173-widget page does not populate 173 widgets.
 npm run watch:link
 
 # in your Strapi project
-npx yalc add --link strapi-plugin-audit-log && npm install
+npx yalc add --link strapi-cms-audit-log && npm install
 npm run develop
 ```
 

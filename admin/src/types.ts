@@ -5,7 +5,7 @@
  * own model: `Date` columns are ISO strings here, and the compiled ignore-list
  * matchers on `AuditConfig` never cross the wire. The canonical definitions live
  * in `server/src/types` and are re-exported from
- * `strapi-plugin-audit-log/strapi-server`; see the note there on why the two
+ * `strapi-cms-audit-log/strapi-server`; see the note there on why the two
  * halves cannot share one module.
  */
 
