@@ -37,7 +37,10 @@ export type AuditSecurityAction =
   | 'media-folder.update'
   | 'media-folder.delete';
 
-export type AuditAnyAction = AuditAction | AuditSecurityAction;
+/** The audit log's own maintenance: the retention purge recording itself. */
+export type AuditMaintenanceAction = 'retention.purge';
+
+export type AuditAnyAction = AuditAction | AuditSecurityAction | AuditMaintenanceAction;
 
 /** Whether the recorded attempt succeeded. Only security actions are ever `failure`. */
 export type AuditOutcome = 'success' | 'failure';
@@ -73,8 +76,23 @@ export interface AuditLog {
   outcome: AuditOutcome | null;
   /** Action-specific detail: the reason a login failed, the path of a denied request, an upload's filename. */
   metadata: Record<string, unknown> | null;
+  /** SHA-256 of this record and its predecessor's hash. Null on rows written before the chain existed. */
+  hash: string | null;
+  prevHash: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Verdict of a full walk of the hash chain. Mirrors the server's `IntegrityReport`. */
+export interface IntegrityReport {
+  ok: boolean;
+  checked: number;
+  hashed: number;
+  legacy: number;
+  head: { id: number; hash: string } | null;
+  start: { id: number } | null;
+  brokenAt?: { id: number; reason: string };
+  verifiedAt: string;
 }
 
 export interface AuditPagination {

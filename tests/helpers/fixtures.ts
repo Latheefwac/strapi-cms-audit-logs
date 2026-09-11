@@ -110,6 +110,8 @@ export const auditLogSchema: Schema = {
     after: { type: 'json' },
     outcome: { type: 'string' },
     metadata: { type: 'json' },
+    hash: { type: 'string' },
+    prevHash: { type: 'string' },
     ipAddress: { type: 'string' },
     userAgent: { type: 'text' },
     source: { type: 'string' },

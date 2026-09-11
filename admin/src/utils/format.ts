@@ -32,6 +32,9 @@ export const ACTION_COLORS: Record<string, { background: string; text: string }>
   'media-folder.create': { background: 'success100', text: 'success600' },
   'media-folder.update': { background: 'primary100', text: 'primary600' },
   'media-folder.delete': { background: 'danger100', text: 'danger600' },
+
+  // The log's own housekeeping. Neutral: expected, scheduled, and self-reported.
+  'retention.purge': { background: 'neutral150', text: 'neutral700' },
 };
 
 export const actionColor = (action: string) =>

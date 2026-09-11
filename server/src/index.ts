@@ -37,6 +37,8 @@ export type {
   AuditLogListResult,
   AuditLogQuery,
   AuditLogLevel,
+  AuditMaintenanceAction,
+  IntegrityReport,
   AuditMetadata,
   AuditOutcome,
   AuditRequestContext,
@@ -55,6 +57,7 @@ export {
   DEFAULT_IGNORED_FIELDS,
   CONTENT_ACTIONS,
   ALL_SECURITY_ACTIONS,
+  ALL_MAINTENANCE_ACTIONS,
   SECURITY_EVENT_MAP,
   SUBJECTS,
 } from './constants';

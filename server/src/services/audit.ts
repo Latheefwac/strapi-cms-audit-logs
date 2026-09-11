@@ -1,9 +1,11 @@
 import type { Core } from '@strapi/strapi';
 
 import {
+  ALL_MAINTENANCE_ACTIONS,
   ALL_SECURITY_ACTIONS,
   ALL_SOURCES,
   AUDIT_LOG_UID,
+  CHAIN_LOCK_KEY,
   CONTENT_ACTIONS,
   PLUGIN_ID,
   SUBJECTS,
@@ -102,35 +104,108 @@ const auditService = ({ strapi }: { strapi: Core.Strapi }) => {
     return { __omitted__: `Snapshot omitted: ~${bytes} bytes exceeds maxSnapshotBytes (${maxBytes}).` };
   };
 
+  /**
+   * In-process serialisation of chain writes.
+   *
+   * Two records written concurrently would both read the same head, both claim
+   * it as their predecessor, and fork the chain — which the verifier would then
+   * report as tampering. Within one process a promise queue is enough; across
+   * replicas the database lock in `withChainLock` does the same job.
+   */
+  let chainQueue: Promise<unknown> = Promise.resolve();
+
+  const serialised = <T>(task: () => Promise<T>): Promise<T> => {
+    const run = chainQueue.then(task, task);
+    // Keep the queue alive past a failure, or one bad write blocks every later one.
+    chainQueue = run.catch(() => undefined);
+    return run;
+  };
+
+  /**
+   * Runs `task` holding a database-level lock on the chain.
+   *
+   * Needed because production runs more than one Strapi replica, and an
+   * in-process mutex knows nothing about the others. A transaction-scoped
+   * advisory lock is the lightest thing that serialises across processes: it is
+   * released at commit, it locks nothing but the chain, and on PostgreSQL it is
+   * a single round trip. MySQL has an equivalent. SQLite has one writer by
+   * construction and needs nothing.
+   *
+   * `trx.raw` rather than `strapi.db.connection.raw`: the latter would take a
+   * *different* pooled connection, and an advisory lock on the wrong connection
+   * serialises nothing at all.
+   */
+  const withChainLock = <T>(task: () => Promise<T>): Promise<T> =>
+    // `transaction` types its result as the callback's own return, which for an
+    // async callback is a Promise of a Promise; at runtime it is flattened.
+    (strapi.db.transaction(async ({ trx }: { trx: any }) => {
+      const client = String((strapi.db as any).dialect?.client ?? '');
+
+      if (client === 'postgres') {
+        await trx.raw('select pg_advisory_xact_lock(?)', [CHAIN_LOCK_KEY]);
+      } else if (client === 'mysql') {
+        // GET_LOCK is session-scoped, not transaction-scoped, so release it
+        // explicitly; a 10s wait is far past anything a single insert needs.
+        await trx.raw('select get_lock(?, 10)', [`audit-log-chain-${CHAIN_LOCK_KEY}`]);
+        try {
+          return await task();
+        } finally {
+          await trx.raw('select release_lock(?)', [`audit-log-chain-${CHAIN_LOCK_KEY}`]);
+        }
+      }
+
+      return task();
+    }) as unknown) as Promise<T>;
+
   const write = async (entry: AuditEntryInput): Promise<void> => {
     const config = getConfig();
+    const integrity = strapi.plugin(PLUGIN_ID).service('integrity');
 
-    await strapi.db.query(AUDIT_LOG_UID).create({
-      data: {
-        action: entry.action,
-        contentType: entry.contentType,
-        contentTypeDisplayName: entry.contentTypeDisplayName,
-        contentDocumentId: entry.contentDocumentId,
-        contentId: entry.contentId,
-        locale: entry.locale,
-        userId: entry.userId,
-        userEmail: entry.userEmail,
-        userName: entry.userName,
-        changes: config.storeChanges ? entry.changes : null,
-        before: capSnapshot(config.storeBefore ? entry.before : null, config.maxSnapshotBytes, 'before'),
-        after: capSnapshot(config.storeAfter ? entry.after : null, config.maxSnapshotBytes, 'after'),
-        ipAddress: entry.ipAddress,
-        userAgent: entry.userAgent,
-        source: entry.source,
-        requestId: entry.requestId,
-        // A content write only ever reaches the tracker once it has succeeded,
-        // so the default is the honest value rather than a placeholder.
-        outcome: entry.outcome ?? 'success',
-        metadata: entry.metadata ?? null,
-      },
-    });
+    const data: Record<string, unknown> = {
+      action: entry.action,
+      contentType: entry.contentType,
+      contentTypeDisplayName: entry.contentTypeDisplayName,
+      contentDocumentId: entry.contentDocumentId,
+      contentId: entry.contentId,
+      locale: entry.locale,
+      userId: entry.userId,
+      userEmail: entry.userEmail,
+      userName: entry.userName,
+      changes: config.storeChanges ? entry.changes : null,
+      before: capSnapshot(config.storeBefore ? entry.before : null, config.maxSnapshotBytes, 'before'),
+      after: capSnapshot(config.storeAfter ? entry.after : null, config.maxSnapshotBytes, 'after'),
+      ipAddress: entry.ipAddress,
+      userAgent: entry.userAgent,
+      source: entry.source,
+      requestId: entry.requestId,
+      // A content write only ever reaches the tracker once it has succeeded,
+      // so the default is the honest value rather than a placeholder.
+      outcome: entry.outcome ?? 'success',
+      metadata: entry.metadata ?? null,
+      // Set here rather than left to the database's timestamp hook, because it
+      // is part of the hash: a record whose time can be changed without
+      // detection is a record whose place in the story can be changed.
+      createdAt: new Date(),
+    };
 
-    if (config.forwardToLogger) forwardToLogger(entry, config);
+    const created = await serialised(() =>
+      withChainLock(async () => {
+        const [head] = (await strapi.db.query(AUDIT_LOG_UID).findMany({
+          select: ['id', 'hash'],
+          orderBy: { id: 'desc' },
+          limit: 1,
+        })) as Array<{ id: number; hash: string | null }>;
+
+        // A head with no hash is a pre-1.2.0 row: the chain starts here rather
+        // than pretending to link to something that was never hashed.
+        data.prevHash = head?.hash ?? null;
+        data.hash = integrity.computeHash(data);
+
+        return (await strapi.db.query(AUDIT_LOG_UID).create({ data })) as AuditLog;
+      })
+    );
+
+    if (config.forwardToLogger) forwardToLogger(entry, config, created);
   };
 
   /**
@@ -149,10 +224,20 @@ const auditService = ({ strapi }: { strapi: Core.Strapi }) => {
    * wrong place to store them; the row in `audit_logs` is the record of truth
    * and `auditLogId` points straight at it.
    */
-  const forwardToLogger = (entry: AuditEntryInput, config: ResolvedConfig): void => {
+  const forwardToLogger = (
+    entry: AuditEntryInput,
+    config: ResolvedConfig,
+    created?: Pick<AuditLog, 'id' | 'hash' | 'prevHash'> | null
+  ): void => {
     try {
       const line = JSON.stringify({
         type: 'audit-log',
+        // The row's identity and its place in the chain, so the external copy
+        // can be reconciled against the database — and can prove a row that
+        // has since vanished from it was there.
+        id: created?.id ?? null,
+        hash: created?.hash ?? null,
+        prevHash: created?.prevHash ?? null,
         action: entry.action,
         outcome: entry.outcome ?? 'success',
         contentType: entry.contentType,
@@ -317,9 +402,6 @@ const auditService = ({ strapi }: { strapi: Core.Strapi }) => {
   const findOne = async (id: number): Promise<AuditLog | null> =>
     (await strapi.db.query(AUDIT_LOG_UID).findOne({ where: { id } })) as AuditLog | null;
 
-  const deleteOne = async (id: number): Promise<AuditLog | null> =>
-    (await strapi.db.query(AUDIT_LOG_UID).delete({ where: { id } })) as AuditLog | null;
-
   const deleteOlderThan = async (date: Date): Promise<number> => {
     const { count } = (await strapi.db.query(AUDIT_LOG_UID).deleteMany({
       where: { createdAt: { $lt: date.toISOString() } },
@@ -452,7 +534,7 @@ const auditService = ({ strapi }: { strapi: Core.Strapi }) => {
       contentTypes: registry.contentTypes,
       users: await adminUsers(),
       locales: await configuredLocales(),
-      actions: [...CONTENT_ACTIONS, ...ALL_SECURITY_ACTIONS],
+      actions: [...CONTENT_ACTIONS, ...ALL_SECURITY_ACTIONS, ...ALL_MAINTENANCE_ACTIONS],
       sources: [...ALL_SOURCES],
       outcomes: ['success', 'failure'],
     };
@@ -573,7 +655,6 @@ const auditService = ({ strapi }: { strapi: Core.Strapi }) => {
     flush,
     find,
     findOne,
-    deleteOne,
     deleteOlderThan,
     getFilterOptions,
     buildWhere,

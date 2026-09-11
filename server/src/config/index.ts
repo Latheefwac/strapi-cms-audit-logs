@@ -50,6 +50,8 @@ export default {
 
     forwardToLogger: false,
     forwardLogLevel: 'info',
+
+    correlationId: true,
   },
 
   /**
@@ -121,6 +123,10 @@ export default {
 
     if (config.forwardToLogger != null && typeof config.forwardToLogger !== 'boolean') {
       fail('"forwardToLogger" must be a boolean');
+    }
+
+    if (config.correlationId != null && typeof config.correlationId !== 'boolean') {
+      fail('"correlationId" must be a boolean');
     }
 
     if (

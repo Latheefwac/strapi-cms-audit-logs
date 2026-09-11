@@ -18,8 +18,10 @@ import accessService from '../../server/src/services/access';
 import auditService from '../../server/src/services/audit';
 import configService from '../../server/src/services/config';
 import contextService from '../../server/src/services/context';
+import correlationService from '../../server/src/services/correlation';
 import diffService from '../../server/src/services/diff';
 import immutabilityService from '../../server/src/services/immutability';
+import integrityService from '../../server/src/services/integrity';
 import retentionService from '../../server/src/services/retention';
 import securityService from '../../server/src/services/security';
 import snapshotService from '../../server/src/services/snapshot';
@@ -39,6 +41,13 @@ export interface QueryLogEntry {
 const clone = <T>(value: T): T =>
   value === undefined ? value : (JSON.parse(JSON.stringify(value)) as T);
 
+const compare = (a: unknown, b: unknown): number => {
+  if (typeof a === 'number' && typeof b === 'number') return a - b;
+  const left = String(a);
+  const right = String(b);
+  return left < right ? -1 : left > right ? 1 : 0;
+};
+
 /** Supports the operator subset the plugin actually emits. */
 const matchesCondition = (value: unknown, condition: unknown): boolean => {
   if (condition === null) return value === null || value === undefined;
@@ -50,14 +59,16 @@ const matchesCondition = (value: unknown, condition: unknown): boolean => {
           return operand === null ? value !== null && value !== undefined : value !== operand;
         case '$in':
           return Array.isArray(operand) && operand.includes(value as never);
+        // Numbers compare as numbers; everything else (ISO dates, mostly) as
+        // strings, which for ISO-8601 is the same order.
         case '$lt':
-          return String(value) < String(operand);
+          return compare(value, operand) < 0;
         case '$lte':
-          return String(value) <= String(operand);
+          return compare(value, operand) <= 0;
         case '$gte':
-          return String(value) >= String(operand);
+          return compare(value, operand) >= 0;
         case '$gt':
-          return String(value) > String(operand);
+          return compare(value, operand) > 0;
         case '$containsi':
           return String(value ?? '')
             .toLowerCase()
@@ -160,9 +171,18 @@ export const createFakeStrapi = (options: FakeStrapiOptions = {}) => {
   const query = (uid: string) => ({
     async findMany(params: Row = {}) {
       queryLog.push({ uid, method: 'findMany', where: params.where, select: params.select, populate: params.populate });
-      return table(uid)
-        .filter((row) => matchesWhere(row, params.where))
-        .map((row) => project(row, params.select, params.populate));
+      let rows = table(uid).filter((row) => matchesWhere(row, params.where));
+
+      // The chain walk and the head lookup both order by id; support just that.
+      const [orderField, orderDirection] = Object.entries(params.orderBy ?? {})[0] ?? [];
+      if (orderField) {
+        rows = [...rows].sort((a, b) =>
+          orderDirection === 'desc' ? b[orderField] - a[orderField] : a[orderField] - b[orderField]
+        );
+      }
+      if (typeof params.limit === 'number') rows = rows.slice(0, params.limit);
+
+      return rows.map((row) => project(row, params.select, params.populate));
     },
 
     async findOne(params: Row = {}) {
@@ -270,6 +290,11 @@ export const createFakeStrapi = (options: FakeStrapiOptions = {}) => {
       connection: () => {
         throw new Error('knex is not available in the test harness');
       },
+      /** SQLite semantics: one writer, no advisory lock needed. */
+      dialect: { client: 'sqlite' },
+      /** No real transaction; the callback simply runs with a no-op `trx`. */
+      transaction: async (callback: (ctx: { trx: { raw: () => Promise<void> } }) => Promise<unknown>) =>
+        callback({ trx: { raw: async () => undefined } }),
       metadata: {
         get: (uid: string) => ({
           tableName: uid.replace(/[^a-z0-9]/gi, '_').toLowerCase(),
@@ -360,6 +385,8 @@ export const createFakeStrapi = (options: FakeStrapiOptions = {}) => {
   services.immutability = immutabilityService({ strapi: strapi as never });
   services.security = securityService({ strapi: strapi as never });
   services.access = accessService({ strapi: strapi as never });
+  services.integrity = integrityService({ strapi: strapi as never });
+  services.correlation = correlationService({ strapi: strapi as never });
 
   /**
    * Runs an action through the registered Document Service middlewares, exactly

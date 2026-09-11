@@ -15,7 +15,7 @@ import {
   Typography,
   VisuallyHidden,
 } from '@strapi/design-system';
-import { CaretDown, CaretUp, Eye, Trash } from '@strapi/icons';
+import { CaretDown, CaretUp, Eye } from '@strapi/icons';
 import { useIntl } from 'react-intl';
 
 import { actionColor, formatDate, formatUser, shortContentTypeName } from '../utils/format';
@@ -27,7 +27,6 @@ interface AuditLogTableProps {
   sort: string;
   onSortChange: (sort: string) => void;
   onView: (log: AuditLog) => void;
-  onDelete: ((log: AuditLog) => void) | null;
   isLoading: boolean;
 }
 
@@ -60,7 +59,6 @@ const AuditLogTable = ({
   sort,
   onSortChange,
   onView,
-  onDelete,
   isLoading,
 }: AuditLogTableProps) => {
   const { formatMessage, locale } = useIntl();
@@ -184,19 +182,6 @@ const AuditLogTable = ({
                   >
                     <Eye />
                   </IconButton>
-
-                  {onDelete ? (
-                    <IconButton
-                      label={formatMessage({
-                        id: getTranslation('list.delete'),
-                        defaultMessage: 'Delete this record',
-                      })}
-                      variant="ghost"
-                      onClick={() => onDelete(log)}
-                    >
-                      <Trash />
-                    </IconButton>
-                  ) : null}
                 </Flex>
               </Td>
             </Tr>

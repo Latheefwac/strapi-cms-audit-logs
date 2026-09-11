@@ -1,25 +1,16 @@
 import * as React from 'react';
 
-import { Box, Dialog, Flex, Typography } from '@strapi/design-system';
-import {
-  ConfirmDialog,
-  Layouts,
-  Page,
-  Pagination,
-  SearchInput,
-  useNotification,
-  useQueryParams,
-  useRBAC,
-} from '@strapi/strapi/admin';
+import { Box, Flex, Typography } from '@strapi/design-system';
+import { Layouts, Page, Pagination, SearchInput, useQueryParams } from '@strapi/strapi/admin';
 import { useIntl } from 'react-intl';
 import { useNavigate } from 'react-router-dom';
 
 import { AuditLogFilters } from '../components/AuditLogFilters';
 import { AuditLogTable } from '../components/AuditLogTable';
-import { useAuditFilterOptions, useAuditLogs, useDeleteAuditLog } from '../hooks/useAuditLogs';
-import { PERMISSIONS } from '../permissions';
+import { IntegrityStatus } from '../components/IntegrityStatus';
+import { useAuditFilterOptions, useAuditLogs } from '../hooks/useAuditLogs';
 import { getTranslation } from '../utils/getTranslation';
-import type { AuditListQuery, AuditLog } from '../types';
+import type { AuditListQuery } from '../types';
 
 /**
  * Turns the page's query state into the server request.
@@ -41,21 +32,12 @@ const toSearchParams = (query: AuditListQuery): string => {
 const AuditLogs = () => {
   const { formatMessage } = useIntl();
   const navigate = useNavigate();
-  const { toggleNotification } = useNotification();
 
   const [{ query }, setQuery] = useQueryParams<AuditListQuery>({ page: 1, pageSize: 20 });
 
-  const {
-    allowedActions: { canDelete },
-    isLoading: isLoadingPermissions,
-  } = useRBAC(PERMISSIONS);
-
   const search = React.useMemo(() => toSearchParams(query), [query]);
-  const { data, pagination, isLoading, error, refresh } = useAuditLogs(search);
+  const { data, pagination, isLoading, error } = useAuditLogs(search);
   const { options } = useAuditFilterOptions();
-  const deleteLog = useDeleteAuditLog();
-
-  const [pendingDelete, setPendingDelete] = React.useState<AuditLog | null>(null);
 
   /**
    * Any filter change resets to page 1.
@@ -88,36 +70,6 @@ const AuditLogs = () => {
     );
   }, [setQuery]);
 
-  const confirmDelete = React.useCallback(async () => {
-    if (!pendingDelete) return;
-
-    try {
-      await deleteLog(pendingDelete.id);
-      toggleNotification({
-        type: 'success',
-        message: formatMessage({
-          id: getTranslation('delete.success'),
-          defaultMessage: 'Audit record deleted.',
-        }),
-      });
-      refresh();
-    } catch {
-      toggleNotification({
-        type: 'danger',
-        message: formatMessage({
-          id: getTranslation('delete.error'),
-          defaultMessage: 'Could not delete this audit record.',
-        }),
-      });
-    } finally {
-      setPendingDelete(null);
-    }
-  }, [deleteLog, formatMessage, pendingDelete, refresh, toggleNotification]);
-
-  if (isLoadingPermissions) {
-    return <Page.Loading />;
-  }
-
   return (
     <Page.Main>
       <Page.Title>
@@ -148,6 +100,10 @@ const AuditLogs = () => {
       />
 
       <Layouts.Content>
+        <Box paddingBottom={4}>
+          <IntegrityStatus />
+        </Box>
+
         <AuditLogFilters
           options={options}
           query={query}
@@ -170,7 +126,6 @@ const AuditLogs = () => {
             sort={String(query.sort ?? 'createdAt:desc')}
             onSortChange={(sort) => setQuery({ sort, page: 1 } as AuditListQuery)}
             onView={(log) => navigate(`${log.id}`)}
-            onDelete={canDelete ? setPendingDelete : null}
           />
         )}
 
@@ -187,30 +142,6 @@ const AuditLogs = () => {
           </Pagination.Root>
         </Box>
       </Layouts.Content>
-
-      {/* Strapi's own confirm dialog, so the wording, focus trap and destructive
-          styling match every other delete in the admin panel. */}
-      <Dialog.Root
-        open={pendingDelete !== null}
-        onOpenChange={(open: boolean) => {
-          if (!open) setPendingDelete(null);
-        }}
-      >
-        <ConfirmDialog
-          title={formatMessage({
-            id: getTranslation('delete.title'),
-            defaultMessage: 'Delete audit record',
-          })}
-          onConfirm={confirmDelete}
-          onCancel={() => setPendingDelete(null)}
-        >
-          {formatMessage({
-            id: getTranslation('delete.confirm'),
-            defaultMessage:
-              'Audit records are evidence of what happened to your content. Deleting one cannot be undone. Are you sure?',
-          })}
-        </ConfirmDialog>
-      </Dialog.Root>
     </Page.Main>
   );
 };

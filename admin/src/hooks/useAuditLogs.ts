@@ -8,6 +8,7 @@ import type {
   AuditLog,
   AuditLogListResponse,
   AuditPagination,
+  IntegrityReport,
 } from '../types';
 
 const EMPTY_PAGINATION: AuditPagination = { page: 1, pageSize: 20, pageCount: 0, total: 0 };
@@ -123,6 +124,45 @@ export const useAuditFilterOptions = () => {
   return { options, isLoading };
 };
 
+/**
+ * Runs the hash-chain verification.
+ *
+ * Fetched once per mount of the list page. The walk is server-side and paged,
+ * so its cost grows with the table, but it is a sequential read of an indexed
+ * primary key — the kind of thing a database does quickly — and the check is
+ * worth nothing if it is not run.
+ */
+export const useAuditIntegrity = () => {
+  const { get } = useFetchClient();
+
+  const [data, setData] = React.useState<IntegrityReport | null>(null);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const { data: response } = await get<{ data: IntegrityReport }>(`/${PLUGIN_ID}/integrity`);
+        if (!cancelled) setData(response.data);
+      } catch (err) {
+        if (!cancelled) setError(message(err));
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [get]);
+
+  return { data, isLoading, error };
+};
+
 /** Loads one audit record for the detail page. */
 export const useAuditLog = (id: string | undefined) => {
   const { get } = useFetchClient();
@@ -165,16 +205,4 @@ export const useAuditLog = (id: string | undefined) => {
   }, [get, id]);
 
   return { data, isLoading, error };
-};
-
-/** Deletes one record. Requires `plugin::audit-log.delete` on the server. */
-export const useDeleteAuditLog = () => {
-  const { del } = useFetchClient();
-
-  return React.useCallback(
-    async (id: number): Promise<void> => {
-      await del(`/${PLUGIN_ID}/logs/${id}`);
-    },
-    [del]
-  );
 };

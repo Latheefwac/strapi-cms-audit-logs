@@ -101,6 +101,38 @@ describe('authentication events', () => {
     expect(JSON.stringify(harness.auditRows())).not.toContain('hunter2');
   });
 
+  it('records a failed login the way Strapi actually emits it — un-awaited, then a throw', async () => {
+    // ASVS V7.2.1, and the assessment's F-1. Strapi's login controller calls
+    // `strapi.eventHub.emit('admin.auth.error', ...)` WITHOUT awaiting it and
+    // then throws synchronously; the response is already a 400 by the time the
+    // listener's database write resolves. The existing tests await the emit,
+    // which is a friendlier shape than production ever provides. This one does
+    // not, and asserts the row still lands.
+    const harness = harnessWith();
+    harness.setRequestContext(
+      requestContext({ request: { body: { email: 'victim@example.com', password: 'wrong' } } })
+    );
+
+    const controller = () => {
+      void harness.emit('admin.auth.error', { error: new Error('Invalid credentials'), provider: 'local' });
+      throw new Error('Invalid credentials');
+    };
+
+    expect(controller).toThrow('Invalid credentials');
+
+    // The write is in flight but nobody is awaiting it. Yield until it settles.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const [row] = harness.auditRows();
+    expect(row).toMatchObject({
+      action: 'login.failed',
+      outcome: 'failure',
+      userEmail: 'victim@example.com',
+      ipAddress: '203.0.113.7',
+    });
+  });
+
   it('records a logout against the user who signed out', async () => {
     const harness = harnessWith();
     harness.setRequestContext(requestContext({ request: { path: '/admin/logout' } }));

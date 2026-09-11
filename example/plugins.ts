@@ -162,6 +162,19 @@ export default () => ({
 
       /** Level the mirrored line is written at: debug | info | warn | error. */
       forwardLogLevel: 'info',
+
+      // ----------------------------------------------------------------
+      // Correlation
+      // ----------------------------------------------------------------
+
+      /**
+       * Give every request a correlation id.
+       *
+       * An inbound `x-request-id` (or `x-correlation-id`, `x-amzn-trace-id`) is
+       * honoured; a missing one is minted and echoed back as `X-Request-Id`, so
+       * the id in the audit record is the id in the proxy's access log.
+       */
+      correlationId: true,
     },
   },
 });

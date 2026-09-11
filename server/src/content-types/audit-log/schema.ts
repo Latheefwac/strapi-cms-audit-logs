@@ -89,6 +89,22 @@ const schema = {
     userAgent: { type: 'text' },
     source: { type: 'string' },
     requestId: { type: 'string' },
+
+    /**
+     * Hash chain, for tamper-evidence (ASVS V7.3.3).
+     *
+     * `hash` is SHA-256 over this record's content fields plus `prevHash`, and
+     * `prevHash` is the `hash` of the row written immediately before. Editing any
+     * hashed field, or removing a row from the middle, breaks the link that the
+     * next row asserts — and `services/integrity.ts` can say exactly which row.
+     *
+     * Both are nullable: rows written before 1.2.0 have no hash and are never
+     * backfilled. Hashing them now would vouch for content whose integrity in
+     * the interval cannot be known, which is the opposite of what a hash is for.
+     * 64 lowercase hex characters when present.
+     */
+    hash: { type: 'string', maxLength: 64 },
+    prevHash: { type: 'string', maxLength: 64 },
   },
 
   /**

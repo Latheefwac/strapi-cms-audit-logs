@@ -76,6 +76,7 @@ const configService = ({ strapi }: { strapi: Core.Strapi }) => {
         : '*',
 
       forwardToLogger: raw.forwardToLogger === true,
+      correlationId: raw.correlationId !== false,
       forwardLogLevel: (['debug', 'info', 'warn', 'error'] as const).includes(
         raw.forwardLogLevel as AuditLogLevel
       )

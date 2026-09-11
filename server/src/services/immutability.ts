@@ -2,8 +2,8 @@ import type { Core } from '@strapi/strapi';
 
 import { AUDIT_LOG_UID } from '../constants';
 
-/** Document Service actions that would alter an existing audit record. */
-const FORBIDDEN_ACTIONS = new Set(['update', 'publish', 'unpublish', 'discardDraft', 'clone']);
+/** Document Service actions that would alter or remove an existing audit record. */
+const FORBIDDEN_ACTIONS = new Set(['update', 'delete', 'publish', 'unpublish', 'discardDraft', 'clone']);
 
 /**
  * Second line of defence for audit-record immutability.
@@ -18,11 +18,11 @@ const FORBIDDEN_ACTIONS = new Set(['update', 'publish', 'unpublish', 'discardDra
  * `strapi.documents('plugin::audit-log.audit-log').update(...)` in a bootstrap
  * would otherwise succeed silently. This middleware makes that a loud failure.
  *
- * Deletion is not blocked here. It is a legitimate operation — retention runs on
- * it — and it is gated where it belongs: the only HTTP route that deletes
- * requires `plugin::audit-log.delete`. The plugin's own writes and deletes go
- * through `strapi.db.query`, below the Document Service, so this guard never
- * needs an escape hatch that an attacker could reach for.
+ * Deletion is blocked here as well since 1.2.0. The one legitimate deletion —
+ * retention — goes through `strapi.db.query`, below the Document Service, as do
+ * the plugin's own writes; so this guard never needs an escape hatch that an
+ * attacker could reach for, and a stray `strapi.documents(uid).delete()` in
+ * server code fails loudly instead of quietly removing evidence.
  */
 const immutabilityService = ({ strapi }: { strapi: Core.Strapi }) => {
   const createMiddleware = () => {
@@ -33,8 +33,8 @@ const immutabilityService = ({ strapi }: { strapi: Core.Strapi }) => {
       if (ctx.uid === AUDIT_LOG_UID && FORBIDDEN_ACTIONS.has(ctx.action)) {
         throw new Error(
           `[audit-log] Audit records are immutable: "${ctx.action}" is not permitted on ${AUDIT_LOG_UID}. ` +
-            'Audit logs may only be created by the plugin and deleted through the retention job or the ' +
-            'DELETE /audit-log/logs/:id route, which requires the plugin::audit-log.delete permission.'
+            'Audit logs are written by the plugin and removed only by its retention job. ' +
+            'There is no route, permission or service that deletes an individual record.'
         );
       }
 

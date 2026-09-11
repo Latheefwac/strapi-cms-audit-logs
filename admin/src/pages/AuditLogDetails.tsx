@@ -184,6 +184,19 @@ const AuditLogDetails = () => {
                   value={log.userAgent}
                   mono
                 />
+                <MetaField
+                  label={formatMessage({ id: getTranslation('detail.hash'), defaultMessage: 'Hash' })}
+                  value={log.hash}
+                  mono
+                />
+                <MetaField
+                  label={formatMessage({
+                    id: getTranslation('detail.prevHash'),
+                    defaultMessage: 'Previous hash',
+                  })}
+                  value={log.prevHash}
+                  mono
+                />
               </Grid.Root>
             </Box>
           </Box>

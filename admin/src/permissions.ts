@@ -47,6 +47,5 @@ const entity = (action: string) => ({
 
 export const PERMISSIONS = {
   read: [entity(`plugin::${PLUGIN_ID}.read`)],
-  delete: [entity(`plugin::${PLUGIN_ID}.delete`)],
   settings: [entity(`plugin::${PLUGIN_ID}.settings`)],
 };

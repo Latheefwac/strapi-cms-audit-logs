@@ -9,21 +9,19 @@ import { PLUGIN_ID } from './constants';
  * the other plugins, and the provider namespaces each `uid` with the plugin name
  * — `read` becomes `plugin::audit-log.read`.
  *
- * Read and delete are separate on purpose: an auditor needs to see the trail, an
- * auditor must not be able to erase it, and collapsing the two into one
- * permission would make that distinction unexpressible.
+ * There is no `delete` action. Until 1.2.0 there was one, kept separate from
+ * `read` so that seeing the trail never implied being able to erase it; the
+ * assessment that followed pointed out, correctly, that a permission which
+ * *can* be granted will eventually be granted, and that a Super Admin holds
+ * every permission implicitly. The only way for no interactive role to be able
+ * to delete evidence is for the action not to exist. Strapi removes the stale
+ * grants from the database at the next boot.
  */
 const ACTIONS = [
   {
     section: 'plugins',
     displayName: 'Read audit logs',
     uid: 'read',
-    pluginName: PLUGIN_ID,
-  },
-  {
-    section: 'plugins',
-    displayName: 'Delete audit logs',
-    uid: 'delete',
     pluginName: PLUGIN_ID,
   },
   {
@@ -59,6 +57,10 @@ const register = async ({ strapi }: { strapi: Core.Strapi }) => {
    * The rest of the plugin's wiring stays in `bootstrap`, where
    * `strapi.documents` and `strapi.eventHub` are ready.
    */
+  //
+  // Correlation first, so the id exists by the time the access middleware —
+  // and every listener inside the request — reads `ctx.state.requestId`.
+  strapi.plugin(PLUGIN_ID).service('correlation').register();
   strapi.plugin(PLUGIN_ID).service('access').register();
 };
 

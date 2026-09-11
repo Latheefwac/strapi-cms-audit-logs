@@ -47,8 +47,18 @@ export type AuditSecurityAction =
   | 'media-folder.update'
   | 'media-folder.delete';
 
-/** Every action the plugin can write, across both families. */
-export type AuditAnyAction = AuditAction | AuditSecurityAction;
+/**
+ * Operations the plugin performs on *itself*.
+ *
+ * There is exactly one: the retention job removing expired rows. It is recorded
+ * so that the only deletion the log permits leaves a trace of itself — how many
+ * rows, older than what, when — which is what turns "we have retention" into
+ * something an assessor can check against the row count.
+ */
+export type AuditMaintenanceAction = 'retention.purge';
+
+/** Every action the plugin can write, across all three families. */
+export type AuditAnyAction = AuditAction | AuditSecurityAction | AuditMaintenanceAction;
 
 /**
  * Whether the recorded attempt succeeded.
@@ -148,6 +158,15 @@ export interface AuditLog extends AuditContext {
   outcome: AuditOutcome | null;
   /** Action-specific detail — see {@link AuditMetadata}. */
   metadata: AuditMetadata | null;
+  /**
+   * SHA-256 over this record's hashed fields and `prevHash`, as lowercase hex.
+   *
+   * `null` on rows written before 1.2.0, which predate the chain. See
+   * `services/integrity.ts` for what is hashed and why.
+   */
+  hash: string | null;
+  /** The `hash` of the record written immediately before this one. */
+  prevHash: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -186,6 +205,31 @@ export interface AuditConfig {
   forwardToLogger: boolean;
   /** Level the mirrored line is written at. */
   forwardLogLevel: AuditLogLevel;
+  /**
+   * Mint a request id for requests that arrive without one, and echo it back as
+   * `X-Request-Id`. Every request-borne record then carries a correlation id.
+   */
+  correlationId: boolean;
+}
+
+/** Result of walking the hash chain. */
+export interface IntegrityReport {
+  /** True when every hashed record links to its predecessor and matches its own digest. */
+  ok: boolean;
+  /** Rows examined, hashed or not. */
+  checked: number;
+  /** Rows that carry a hash and were verified. */
+  hashed: number;
+  /** Rows written before the chain existed. Counted, never linked. */
+  legacy: number;
+  /** The most recent record, which is where the next write will link from. */
+  head: { id: number; hash: string } | null;
+  /** The first hashed record — its `prevHash` points at something retention may have removed. */
+  start: { id: number } | null;
+  /** First record that failed verification, with the reason. Absent when `ok`. */
+  brokenAt?: { id: number; reason: string };
+  /** When the walk ran, so a report can be dated. */
+  verifiedAt: string;
 }
 
 /** Levels `strapi.log` exposes that make sense for an audit mirror. */

@@ -1,4 +1,4 @@
-import type { AuditAction, AuditSecurityAction } from './types';
+import type { AuditAction, AuditMaintenanceAction, AuditSecurityAction } from './types';
 
 /** Plugin id. Must match `strapi.name` in package.json — it namespaces routes, permissions and config. */
 export const PLUGIN_ID = 'audit-log';
@@ -11,7 +11,6 @@ export const ALL_ACTIONS: AuditAction[] = ['create', 'update', 'delete', 'publis
 /** RBAC action uids, as they appear once namespaced by the admin permission provider. */
 export const PERMISSIONS = {
   read: `plugin::${PLUGIN_ID}.read`,
-  delete: `plugin::${PLUGIN_ID}.delete`,
   settings: `plugin::${PLUGIN_ID}.settings`,
 } as const;
 
@@ -76,6 +75,23 @@ export const SKIPPED_ATTRIBUTES = new Set([
   'updatedBy',
 ]);
 
+/**
+ * Response header the correlation middleware echoes the request id in.
+ *
+ * Echoed so the id a client (or a proxy access log) sees is the same one the
+ * audit record carries — otherwise correlation only works from the inside.
+ */
+export const REQUEST_ID_RESPONSE_HEADER = 'X-Request-Id';
+
+/**
+ * Advisory-lock key for serialising hash-chain writes on PostgreSQL.
+ *
+ * Any constant works; this one is the CRC-32 of "strapi-audit-log-chain", chosen
+ * so it is stable across processes and unlikely to collide with a lock some
+ * other component picked by the same method.
+ */
+export const CHAIN_LOCK_KEY = 1_874_206_233;
+
 /** Headers checked, in order, for a correlation id. */
 export const REQUEST_ID_HEADERS = ['x-request-id', 'request-id', 'x-correlation-id', 'x-amzn-trace-id'];
 
@@ -126,6 +142,13 @@ export const ALL_SECURITY_ACTIONS: AuditSecurityAction[] = [
 ];
 
 /**
+ * Operations the plugin performs on its own table. Always recorded; there is no
+ * option to switch them off, because a retention purge that left no trace would
+ * be indistinguishable from someone deleting rows.
+ */
+export const ALL_MAINTENANCE_ACTIONS: AuditMaintenanceAction[] = ['retention.purge'];
+
+/**
  * Pseudo content-type uids for events that are not about a content type.
  *
  * `contentType` is `required` on the schema and is what every existing filter,
@@ -143,6 +166,8 @@ export const SUBJECTS = {
   permission: 'admin::permission',
   file: 'plugin::upload.file',
   folder: 'plugin::upload.folder',
+  /** The audit log itself, for records about its own maintenance. */
+  auditLog: 'admin::audit-log',
 } as const;
 
 /** Human labels for {@link SUBJECTS}, snapshotted into `contentTypeDisplayName`. */
@@ -154,6 +179,7 @@ export const SUBJECT_DISPLAY_NAMES: Record<string, string> = {
   [SUBJECTS.permission]: 'Permission',
   [SUBJECTS.file]: 'Media file',
   [SUBJECTS.folder]: 'Media folder',
+  [SUBJECTS.auditLog]: 'Audit log',
 };
 
 /**

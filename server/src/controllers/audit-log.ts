@@ -70,8 +70,9 @@ const parseId = (raw: string | undefined): number | null => {
  * see `routes/admin.ts`. Nothing here re-implements authentication or
  * authorisation; the controller runs only once Strapi's own RBAC has said yes.
  *
- * There is deliberately no create or update handler. Audit records are written
- * by the plugin and read by humans; nothing in between.
+ * There is deliberately no create, update or delete handler. Audit records are
+ * written by the plugin and read by humans; nothing in between. Deletion was
+ * removed in 1.2.0 — see `routes/admin.ts` for why.
  */
 const auditLogController = ({ strapi }: { strapi: Core.Strapi }) => {
   const service = (name: string) => strapi.plugin('audit-log').service(name);
@@ -111,20 +112,6 @@ const auditLogController = ({ strapi }: { strapi: Core.Strapi }) => {
       ctx.body = { data: log };
     },
 
-    async delete(ctx: KoaContext) {
-      const id = parseId(ctx.params.id);
-      if (id === null) return ctx.badRequest('Invalid audit log id.');
-
-      const deleted = await service('audit').deleteOne(id);
-      if (!deleted) return ctx.notFound('Audit log not found.');
-
-      strapi.log.info(
-        `[audit-log] record #${id} deleted by ${service('context').resolve().userEmail ?? 'an admin user'}.`
-      );
-
-      ctx.body = { data: deleted };
-    },
-
     /** Filter dropdown options, derived from the rows that actually exist. */
     async filters(ctx: KoaContext) {
       ctx.body = { data: await service('audit').getFilterOptions() };
@@ -133,6 +120,11 @@ const auditLogController = ({ strapi }: { strapi: Core.Strapi }) => {
     /** The effective configuration, so the UI can hide controls for disabled features. */
     async config(ctx: KoaContext) {
       ctx.body = { data: service('config').getPublicConfig() };
+    },
+
+    /** Verifies the hash chain end to end. See `services/integrity.ts`. */
+    async integrity(ctx: KoaContext) {
+      ctx.body = { data: await service('integrity').verify() };
     },
   };
 };

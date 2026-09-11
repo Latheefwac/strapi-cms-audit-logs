@@ -55,12 +55,14 @@ describe('immutability guard', () => {
     }
   );
 
-  it('allows delete, which retention and the delete route both need', async () => {
+  it('forbids delete as well, so no server code can remove a record', async () => {
+    // Retention goes through strapi.db.query, below this guard, so it is the
+    // one path left — and it is not a path a request can reach.
     const harness = guarded();
 
     await expect(
       harness.runDocumentAction(AUDIT_LOG_UID, 'delete', {}, async () => ({ ok: true }))
-    ).resolves.toEqual({ ok: true });
+    ).rejects.toThrow(/immutable/);
   });
 
   it('leaves every other content type alone', async () => {
@@ -92,7 +94,19 @@ describe('retention', () => {
     const deleted = await harness.services.retention.cleanup();
 
     expect(deleted).toBe(1);
-    expect(harness.auditRows()).toHaveLength(2);
+    // Two survivors plus the purge's own record: the one deletion the plugin
+    // permits leaves evidence of itself.
+    expect(harness.auditRows()).toHaveLength(3);
+
+    const purge = harness.auditRows().at(-1)!;
+    expect(purge).toMatchObject({
+      action: 'retention.purge',
+      contentType: 'admin::audit-log',
+      source: 'cron',
+      outcome: 'success',
+    });
+    expect(purge.metadata).toMatchObject({ deletedCount: 1, retentionDays: 365 });
+    expect(typeof purge.metadata.cutoff).toBe('string');
   });
 
   it('deletes nothing when retentionDays is 0', async () => {

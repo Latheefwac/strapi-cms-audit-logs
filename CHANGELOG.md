@@ -5,6 +5,71 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] — 2026-09-11
+
+Remediates every finding of the 10 September OWASP ASVS Level 2 (V7) assessment.
+The audit log can no longer be pruned by anyone, can prove it has not been, and
+carries a correlation id on every request-borne record.
+
+### Security
+
+**F-2 — audit records were deletable (HIGH, V7.3.1 / 7.3.3)**
+- The `DELETE /audit-log/logs/:id` route, its controller handler, the
+  `plugin::audit-log.delete` RBAC action and the per-row delete button are
+  **removed**. There is no permission an administrator could grant to bring
+  deletion back. Strapi drops the stale grants from the database at the first
+  boot after upgrading.
+- `strapi.documents(uid).delete()` on the audit type now throws, alongside
+  update, publish, unpublish, discardDraft and clone.
+- The retention purge — the one deletion that remains — **records itself** as
+  `retention.purge`, with the count, the cutoff and the configured window. It is
+  not gated by `securityEvents`; there is no configuration in which a purge
+  should be silent.
+- **Hash chain.** Every record stores `hash` (SHA-256 over its content fields,
+  `createdAt` and `prevHash`) and `prevHash`. Editing, removing or inserting a
+  record is detectable, and the verifier says at which row. Writes are
+  serialised — an in-process queue plus a PostgreSQL transaction-scoped
+  advisory lock for multi-replica deployments — so concurrent records cannot
+  fork the chain. `createdAt` is now set by the plugin rather than the database
+  so it can be part of the hash.
+- New `integrity` service with `verify()`, new `GET /audit-log/integrity` route
+  (behind `read`), and a verdict line at the top of the list page on every visit.
+- Rows written before 1.2.0 have no hash. They are counted as `legacy` and never
+  backfilled — a hash computed today over a row written last week vouches for
+  nothing about last week.
+
+**F-3 — no off-box copy (MEDIUM, V7.3.3)**
+- The forwarded log line now includes `id`, `hash` and `prevHash`, so the
+  collector's copy carries the chain and a row that has vanished from the
+  database is still provably in the external log. The consuming project should
+  set `forwardToLogger: true`; the mechanism was already there, switched off.
+
+**F-4 — correlation ids absent on ~90% of records (LOW, V7.1.x)**
+- New `correlation` middleware, registered ahead of the access middleware from
+  the plugin's `register` lifecycle: honours an inbound `x-request-id` /
+  `x-correlation-id` / `x-amzn-trace-id` when it is shaped like an id, mints a
+  UUID otherwise, and echoes it back as `X-Request-Id`. Every record written
+  inside a request now has one. New `correlationId` option, default `true`.
+
+**F-1 — failed logins not observed (HIGH, V7.2.1)**
+- No defect found: the listener is correct and the assessment created no
+  records to observe. A test now drives the exact shape Strapi's login
+  controller produces — an un-awaited `emit` followed by a synchronous throw —
+  and asserts the row lands. The README gains a one-line production check.
+
+### Added
+
+- `AuditMaintenanceAction` (`'retention.purge'`), `IntegrityReport`, and the
+  `admin::audit-log` subject.
+- `hash` and `prevHash` on `AuditLog`; both shown on the detail page.
+- ASVS V7 mapping table in the README.
+
+### Removed
+
+- `PERMISSIONS.delete`, `useDeleteAuditLog`, the `delete.*` translations, and
+  `audit.deleteOne()`. Consumers that referenced any of them will fail to compile,
+  which is the intended way to find out.
+
 ## [1.1.0] — 2026-09-03
 
 Adds the half of an audit trail that is not about content — authentication,

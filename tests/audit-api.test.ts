@@ -225,13 +225,19 @@ describe('route protection', () => {
     }
   });
 
-  it('gates deletion behind a separate audit-log.delete', () => {
-    // Being allowed to investigate must not imply being allowed to erase.
-    const remove = adminRoutes.routes.find((route) => route.method === 'DELETE');
-    const policy = remove!.config.policies[1] as { config: { actions: string[] } };
+  it('registers no delete route and no delete permission', () => {
+    // ASVS V7.3.1: protected from unauthorised deletion. The surest way to have
+    // no unauthorised deletion is to have no deletion — no route to call and no
+    // permission that could ever be granted to call it with.
+    expect(adminRoutes.routes.map((route) => route.method)).not.toContain('DELETE');
+    expect(Object.keys(PERMISSIONS)).not.toContain('delete');
+  });
 
-    expect(policy.config.actions).toEqual([PERMISSIONS.delete]);
-    expect(PERMISSIONS.delete).not.toBe(PERMISSIONS.read);
+  it('exposes the integrity check behind read', () => {
+    const route = adminRoutes.routes.find((r) => r.path === '/integrity');
+    const policy = route!.config.policies[1] as { config: { actions: string[] } };
+    expect(route!.method).toBe('GET');
+    expect(policy.config.actions).toEqual([PERMISSIONS.read]);
   });
 
   it('never registers a create or update route', () => {

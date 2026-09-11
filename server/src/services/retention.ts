@@ -1,6 +1,6 @@
 import type { Core } from '@strapi/strapi';
 
-import { RETENTION_JOB_NAME } from '../constants';
+import { RETENTION_JOB_NAME, SUBJECTS, SUBJECT_DISPLAY_NAMES } from '../constants';
 import type { ResolvedConfig } from './config';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -35,12 +35,45 @@ const retentionService = ({ strapi }: { strapi: Core.Strapi }) => {
     if (retentionDays <= 0) return 0;
 
     const cutoff = cutoffDate(retentionDays);
-    const deleted = await strapi.plugin('audit-log').service('audit').deleteOlderThan(cutoff);
+    const audit = strapi.plugin('audit-log').service('audit');
+    const deleted = await audit.deleteOlderThan(cutoff);
 
     if (deleted > 0) {
       strapi.log.info(
         `[audit-log] retention removed ${deleted} record(s) created before ${cutoff.toISOString()}.`
       );
+
+      /**
+       * The purge records itself.
+       *
+       * This is the only deletion the plugin permits, and a deletion that leaves
+       * no trace is indistinguishable from someone removing rows by hand. The
+       * record goes through the normal write path, so it is chained like any
+       * other and forwarded like any other; the count and the cutoff are what
+       * let a reviewer reconcile the table against what retention says it did.
+       * Not gated by `securityEvents` — there is no configuration in which a
+       * purge should be silent.
+       */
+      await audit.record({
+        action: 'retention.purge',
+        contentType: SUBJECTS.auditLog,
+        contentTypeDisplayName: SUBJECT_DISPLAY_NAMES[SUBJECTS.auditLog] ?? 'Audit log',
+        contentDocumentId: null,
+        contentId: null,
+        locale: null,
+        changes: null,
+        before: null,
+        after: null,
+        outcome: 'success',
+        metadata: { deletedCount: deleted, cutoff: cutoff.toISOString(), retentionDays },
+        source: 'cron',
+        userId: null,
+        userEmail: null,
+        userName: null,
+        ipAddress: null,
+        userAgent: null,
+        requestId: null,
+      });
     }
 
     return deleted;
