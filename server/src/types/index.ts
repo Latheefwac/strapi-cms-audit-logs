@@ -1,11 +1,11 @@
 /**
  * Public type surface of the plugin.
  *
- * Re-exported from `strapi-plugin-audit-log/strapi-server`, so a consuming
+ * Re-exported from `strapi-cms-audit-log/strapi-server`, so a consuming
  * application can type its own code against the same shapes the plugin uses:
  *
  * ```ts
- * import type { AuditLog, AuditConfig } from 'strapi-plugin-audit-log/strapi-server';
+ * import type { AuditLog, AuditConfig } from 'strapi-cms-audit-log/strapi-server';
  * ```
  *
  * The admin panel keeps its own copies of the few shared unions in
