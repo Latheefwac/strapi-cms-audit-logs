@@ -588,8 +588,14 @@ const auditService = ({ strapi }: { strapi: Core.Strapi }) => {
   });
 
   /** The distinct values actually present in the table. */
-  const readStoredOptions = async (): Promise<AuditFilterOptions> => {
-    const knex = strapi.db.connection;
+  const readStoredOptions = (): Promise<AuditFilterOptions> =>
+    // Never raw `strapi.db.connection`: from inside an open transaction it takes
+    // a second pooled connection, and `Promise.all` below would take six. On the
+    // transaction's one connection the six queries simply run in turn.
+    (strapi.db.transaction(({ trx }: { trx: any }) => readStoredOptionsWith(trx)) as unknown) as
+      Promise<AuditFilterOptions>;
+
+  const readStoredOptionsWith = async (knex: any): Promise<AuditFilterOptions> => {
     const metadata = strapi.db.metadata.get(AUDIT_LOG_UID);
     const table = metadata.tableName;
 
