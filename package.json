@@ -100,7 +100,7 @@
     "description": "Automatic audit logging with field-level diffs and an RBAC-protected admin UI."
   },
   "engines": {
-    "node": ">=18.0.0 <=22.x.x"
+    "node": ">=18.0.0 <=26.x.x"
   },
   "publishConfig": {
     "access": "public"
