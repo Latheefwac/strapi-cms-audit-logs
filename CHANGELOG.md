@@ -5,6 +5,19 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] — 2026-11-06
+
+### Fixed
+- Building the list page's filter options no longer takes extra pooled
+  database connections. `readStoredOptions` ran its six `DISTINCT` queries on
+  raw `strapi.db.connection`, which from inside an open transaction takes a
+  second connection per query and can exhaust a small pool. The queries now run
+  in turn on a single transaction connection.
+
+### Changed
+- Removed the upper bound on the supported Node.js version; `engines.node` is
+  now `>=18.0.0`.
+
 ## [1.2.0] — 2026-09-11
 
 Remediates every finding of the 10 September OWASP ASVS Level 2 (V7) assessment.

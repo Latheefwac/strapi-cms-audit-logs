@@ -126,7 +126,7 @@ sidebar entry are all created on boot.
 | | |
 |---|---|
 | Strapi | `^5.0.0` (developed and tested against 5.52) |
-| Node | `>=18 <=26` |
+| Node | `>=18` |
 | Database | Any Strapi v5 supports — PostgreSQL, MySQL/MariaDB, SQLite |
 
 There is one manual step after installing: **grant the permission**. See
